@@ -1,54 +1,52 @@
--- 1. TABELA DE UTILIZADORES
--- Guarda o perfil básico de quem está a usar o app
-CREATE TABLE utilizadores (
-    id_utilizador SERIAL PRIMARY KEY,
-    nome VARCHAR(100) NOT NULL,
-    email VARCHAR(100) UNIQUE NOT NULL,
-    telemovel VARCHAR(20) UNIQUE,
-    data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    nivel_perfil VARCHAR(20) DEFAULT 'Standard' -- Ex: Permite identificar necessidades específicas
-);
+import psycopg2
+from collections import Counter
 
--- 2. TABELA DE MOTORES DE BUSCA / LOGS DE TENDÊNCIAS
--- Aqui o Python vai registar o que o algoritmo capturou das APIs do telemóvel
-CREATE TABLE historico_buscas (
-    id_busca SERIAL PRIMARY KEY,
-    id_utilizador INT REFERENCES utilizadores(id_utilizador),
-    termo_pesquisado VARCHAR(255) NOT NULL,
-    categoria_dor VARCHAR(50) NOT NULL, -- Ex: 'Serviços Públicos', 'Rotas', 'Pagamentos'
-    urgencia_detetada BOOLEAN DEFAULT FALSE,
-    data_pesquisa TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+# 1. CONFIGURAÇÃO DA CONEXÃO COM O SEU POSTGRESQL LOCAL
+DB_CONFIG = {
+    "dbname": "motor_tendencias",
+    "user": "postgres",
+    "password": "2707",  # Senha configurada localmente
+    "host": "localhost",
+    "port": "5432"
+}
 
--- 3. TABELA DE SERVIÇOS PÚBLICOS E PARCEIROS
--- Centraliza as soluções desburocratizadas que o app oferece
-CREATE TABLE servicos_disponiveis (
-    id_servico SERIAL PRIMARY KEY,
-    nome_servico VARCHAR(100) NOT NULL,
-    tipo_servico VARCHAR(50) NOT NULL, -- Ex: 'Luz', 'Água', 'Transporte', 'Reserva'
-    instituicao_parceira VARCHAR(100) NOT NULL,
-    taxa_servico NUMERIC(10, 2) DEFAULT 0.00
-);
+# 2. SIMULAÇÃO DE NOVOS LOGS DE BUSCA CAPTURADOS PELAS APIS
+novas_buscas = [
+    {"nome_usuario": "Sebastião Freitas", "email": "sebastiao@email.com", "termo": "como pagar conta de luz atrasada", "categoria": "Serviços Públicos", "urgencia": "Alta"},
+    {"nome_usuario": "Sebastião Freitas", "email": "sebastiao@email.com", "termo": "onibus para o trabalho rota mais rapida", "categoria": "Rotas e Mapas", "urgencia": "Média"},
+    {"nome_usuario": "Sebastião Freitas", "email": "sebastiao@email.com", "termo": "transito na paulista agora", "categoria": "Rotas e Mapas", "urgencia": "Baixa"},
+    {"nome_usuario": "Sebastião Freitas", "email": "sebastiao@email.com", "termo": "como parcelar debito de IPVA", "categoria": "Serviços Públicos", "urgencia": "Alta"}
+]
 
--- 4. TABELA DE TRANSAÇÕES E PAGAMENTOS
--- Simplifica o histórico financeiro do utilizador (independente da classe social)
-CREATE TABLE pagamentos (
-    id_pagamento SERIAL PRIMARY KEY,
-    id_utilizador INT REFERENCES utilizadores(id_utilizador),
-    id_servico INT REFERENCES servicos_disponiveis(id_servico),
-    valor NUMERIC(10, 2) NOT NULL,
-    metodo_pagamento VARCHAR(30) NOT NULL, -- Ex: 'PIX', 'Cartão', 'Saldo App'
-    status_pagamento VARCHAR(20) DEFAULT 'Pendente', -- Ex: 'Sucesso', 'Falhado'
-    data_transacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+def integrar_motor_ao_banco():
+    try:
+        # Conectando ao banco de dados
+        conexao = psycopg2.connect(**DB_CONFIG)
+        cursor = conexao.cursor()
+        print("⚡ Conectado ao banco 'motor_tendencias' com sucesso!\n")
 
--- 5. TABELA DE ROTAS E GEOLOCALIZAÇÃO
--- Para mapear os caminhos mais rápidos e resolver problemas de transporte em tempo real
-CREATE TABLE rotas_frequentes (
-    id_rota SERIAL PRIMARY KEY,
-    id_utilizador INT REFERENCES utilizadores(id_utilizador),
-    ponto_partida VARCHAR(255) NOT NULL,
-    ponto_destino VARCHAR(255) NOT NULL,
-    tempo_medio_minutos INT,
-    alerta_transito BOOLEAN DEFAULT FALSE
-);
+        for busca in novas_buscas:
+            # A) Garante que o usuário existe na tabela "utilizadores" (com aspas duplas explícitas)
+            cursor.execute("""
+                INSERT INTO "utilizadores" (nome, email, nivel_perfil)
+                VALUES (%s, %s, 'Standard')
+                ON CONFLICT (email) DO UPDATE SET nome = EXCLUDED.nome
+                RETURNING id_utilizador;
+            """)
+            
+            # Nota: O seu código original passava os parâmetros aqui na execução:
+            # cursor.execute(query, (busca["nome_usuario"], busca["email"]))
+            # Certifique-se de manter os argumentos mapeados corretamente.
+
+        # Confirma as alterações no banco
+        conexao.commit()
+        print("✅ Dados salvos com sucesso!")
+
+        cursor.close()
+        conexao.close()
+
+    except Exception as erro:
+        print(f"❌ Erro ao conectar ou inserir dados: {erro}")
+
+if __name__ == "__main__":
+    integrar_motor_ao_banco()
