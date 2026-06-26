@@ -24,6 +24,32 @@ def integrar_motor_ao_banco():
         cursor = conexao.cursor()
         print("⚡ Conectado ao banco 'motor_tendencias' com sucesso!\n")
 
+        # =======================================================
+        # GARANTIA AUTÔNOMA: CRIAÇÃO E CARGA DA TABELA DE SERVIÇOS
+        # =======================================================
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS servicos_disponiveis (
+                id_servico SERIAL PRIMARY KEY,
+                nome_servico VARCHAR(100) NOT NULL,
+                tipo_servico VARCHAR(50) NOT NULL,
+                instituicao_parceira VARCHAR(100) NOT NULL,
+                taxa_servico NUMERIC(10, 2) DEFAULT 0.00
+            );
+        """)
+        
+        # Limpa para evitar duplicados nos testes locais e recarrega os parceiros homologados
+        cursor.execute("TRUNCATE TABLE servicos_disponiveis RESTART IDENTITY CASCADE;")
+        cursor.execute("""
+            INSERT INTO servicos_disponiveis (nome_servico, tipo_servico, instituicao_parceira, taxa_servico)
+            VALUES 
+            ('Parcelamento de Contas Flex', 'Serviços Públicos', 'Banco Parcerias S.A.', 1.50),
+            ('Alerta de Trânsito Premium', 'Rotas e Mapas', 'MapasLivres App', 0.00),
+            ('Microcrédito d''Urgência', 'Serviços Públicos', 'Fintech Popular', 3.00);
+        """)
+
+        # =======================================================
+        # FLUXO PADRÃO: INSERÇÃO DE USUÁRIOS E BUSCAS
+        # =======================================================
         for busca in novas_buscas:
             # A) Garante que o usuário existe na tabela 'utilizadores'
             cursor.execute("""
@@ -41,16 +67,16 @@ def integrar_motor_ao_banco():
                 VALUES (%s, %s, %s, %s);
             """, (id_usuario, busca["termo"], busca["categoria"], busca["urgencia"]))
 
-        # Confirma as alterações no banco
+        # Confirma as alterações de forma permanente (COMMIT GLOBAL)
         conexao.commit()
         print("✅ Dados salvos com sucesso nas tabelas relacionais!")
 
         # =======================================================
-        # MÓDULO ANALÍTICO: EXTRAÇÃO DE INSIGHTS (BI)
+        # MÓDULO ANALÍTICO: EXTRAÇÃO DE INSIGHTS E RECOMENDAÇÕES (BI)
         # =======================================================
-        print("\n" + "="*40)
+        print("\n" + "="*60)
         print("📊 MOTOR DE INTELIGÊNCIA: RESUMO DE TENDÊNCIAS")
-        print("="*40)
+        print("="*60)
 
         # Insight 1: Total de Utilizadores Únicos Mapeados
         cursor.execute('SELECT COUNT(*) FROM utilizadores;')
@@ -78,8 +104,24 @@ def integrar_motor_ao_banco():
         print(f"\n🚨 Alertas de Urgência 'Alta' detetados: {urgencias_altas}")
         
         if urgencias_altas > 0:
-            print("   ⚠️ Sugestão do Motor: Disparar notificações de soluções imediatas!")
-        print("="*40)
+            print("\n💡 SISTEMA DE RECOMENDAÇÃO DE SOLUÇÕES (JOIN EM TEMPO REAL):")
+            print("   [Cruzando dores críticas com parceiros homologados...]")
+            
+            # Query Avançada: JOIN entre histórico de buscas e serviços disponíveis
+            cursor.execute("""
+                SELECT DISTINCT h.categoria_dor, s.nome_servico, s.instituicao_parceira, s.taxa_servico
+                FROM historico_buscas h
+                JOIN servicos_disponiveis s ON s.tipo_servico = h.categoria_dor
+                WHERE h.urgencia_detetada = 'Alta';
+            """)
+            
+            recomendacoes = cursor.fetchall()
+            for rec in recomendacoes:
+                print(f"\n   🎯 Categoria Crítica: {rec[0]}")
+                print(f"      📢 Solução Sugerida: {rec[1]}")
+                print(f"      🏢 Parceiro: {rec[2]}")
+                print(f"      💳 Taxa do Serviço: {rec[3]}%")
+        print("="*60)
 
         cursor.close()
         conexao.close()
